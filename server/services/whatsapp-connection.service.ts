@@ -11,7 +11,7 @@ import baileys, {
   isJidBroadcast,
   proto
 } from '@whiskeysockets/baileys';
-import pino from 'pino';
+import baseLogger from './logger.service';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Boom } from '@hapi/boom';
@@ -26,7 +26,7 @@ if (!fs.existsSync(SESSIONS_DIR)) {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 }
 
-const logger = pino({ level: 'debug' }).child({ class: 'WhatsappConnectionService' });
+const logger = baseLogger.child({ class: 'WhatsappConnectionService' });
 
 export interface WhatsappConnectionStatus {
   status: 'disconnected' | 'connecting' | 'connected' | 'qr_code_needed' | 'auth_failure' | 'error' | 'disconnected_logged_out';
@@ -79,7 +79,7 @@ export class WhatsappConnectionService {
         
         this.sock = makeWASocket({
           version,
-          logger: pino({ level: 'warn' }),
+          logger: baseLogger.child({ class: 'BaileysLib' }).child({ level: 'warn' }),
           printQRInTerminal: false,
           auth: state,
           browser: Browsers.ubuntu('Chrome'),

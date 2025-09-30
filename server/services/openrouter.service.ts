@@ -1,81 +1,86 @@
-// server/services/openrouter.service.ts
 import axios from 'axios';
-import { OPENROUTER_API_KEY, APP_BASE_URL } from '../config';
+import 'dotenv/config';
 
 class OpenRouterService {
-  private readonly openRouterApiKey: string;
-  private readonly siteUrl: string;
+    private apiKeys: string[] = [];
+    private currentKeyIndex = 0;
 
-  constructor(apiKey: string, siteUrl: string) {
-    this.openRouterApiKey = apiKey;
-    this.siteUrl = siteUrl;
-
-    if (!this.openRouterApiKey) {
-      console.warn('[OpenRouterService] API Key não configurada. O serviço não funcionará.');
-    }
-  }
-
-  public async createLandingPageFromPrompt(prompt: string, modelName: string = 'anthropic/claude-3-haiku'): Promise<string> {
-    if (!this.openRouterApiKey) {
-      throw new Error('A API Key da OpenRouter não está configurada no servidor.');
-    }
-
-    const systemPrompt = `
-      Você é um desenvolvedor frontend expert e designer de UI/UX, especializado em criar landing pages de altíssima conversão usando Tailwind CSS.
-      Sua tarefa é gerar o código para uma landing page completa, moderna e visualmente atraente, baseada na solicitação do usuário.
-
-      PALETA DE CORES SUGERIDA (use como base):
-      - Background: #0A0A0A (Quase preto)
-      - Foreground/Text: #F1F1F1 (Branco suave)
-      - Primary/Accent: #38BDF8 (Azul claro vibrante)
-      - Secondary/Muted: #1E1E1E (Cinza muito escuro)
-      - Card/Panel: #141414 (Cinza escuro)
-
-      REGRAS DE ESTRUTURA E ESTILO:
-      - Responda APENAS com o código HTML. Nenhum texto, explicação ou comentário fora do código.
-      - O código deve ser um arquivo HTML completo, começando com <!DOCTYPE html> e terminando com </html>.
-      - **Sempre** inclua o script do Tailwind CSS via CDN no <head>: <script src="https://cdn.tailwindcss.com"></script>.
-      - Use CSS embarcado em uma tag <style> dentro do <head> APENAS para fontes customizadas ou animações complexas. TODO o resto da estilização deve ser feito com classes do Tailwind CSS diretamente nos elementos HTML.
-      - O design deve ser moderno, limpo, responsivo e com bom espaçamento. Use seções distintas para cada parte da página.
-      - ESTRUTURA SUGERIDA: Header (com logo), Seção Herói (com título forte e CTA), Seção de Benefícios/Recursos, Seção de Prova Social (Depoimentos), Seção de CTA Final e Footer.
-      - Use imagens de placeholder do serviço 'https://placehold.co/' (ex: https://placehold.co/800x400).
-      - Utilize ícones (SVG embutido) da biblioteca Lucide Icons (https://lucide.dev/) para enriquecer a UI onde for apropriado.
-    `;
-
-    try {
-      const response = await axios.post(
-        'https://openrouter.ai/api/v1/chat/completions',
-        {
-          model: modelName,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt }
-          ],
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${this.openRouterApiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': this.siteUrl, 
-            'X-Title': 'USB MKT PRO', 
-          },
+    constructor() {
+        this.loadApiKeys();
+        if (this.apiKeys.length === 0) {
+            console.warn("Nenhuma chave de API da OpenRouter foi encontrada nas variáveis de ambiente (OPENROUTER_API_KEY_1, OPENROUTER_API_KEY_2, etc.). O serviço de IA não funcionará.");
         }
-      );
-
-      let htmlContent = response.data.choices[0].message.content;
-
-      // Limpa qualquer texto ou markdown que a IA possa ter adicionado antes do HTML
-      const htmlMatch = htmlContent.match(/<!DOCTYPE html>.*<\/html>/is);
-      if (htmlMatch) {
-        htmlContent = htmlMatch[0];
-      }
-
-      return htmlContent;
-    } catch (error: any) {
-      console.error('[OpenRouterService] Erro ao chamar a API da OpenRouter:', error.response?.data || error.message);
-      throw new Error('Falha ao gerar landing page com a IA.');
     }
-  }
+
+    /**
+     * Carrega as chaves de API da OpenRouter das variáveis de ambiente.
+     * Procura por variáveis no formato OPENROUTER_API_KEY_1, OPENROUTER_API_KEY_2, ...
+     */
+    private loadApiKeys() {
+        this.apiKeys = Object.keys(process.env)
+            .filter(key => key.startsWith('OPENROUTER_API_KEY_'))
+            .sort()
+            .map(key => process.env[key]!)
+            .filter(key => key); // Garante que não haja chaves vazias
+    }
+
+    /**
+     * Obtém a próxima chave de API da lista, implementando a rotação.
+     * @returns A próxima chave de API.
+     * @throws Se nenhuma chave de API estiver configurada.
+     */
+    private getNextKey(): string {
+        if (this.apiKeys.length === 0) {
+            throw new Error('Nenhuma chave de API da OpenRouter configurada.');
+        }
+        const key = this.apiKeys[this.currentKeyIndex];
+        this.currentKeyIndex = (this.currentKeyIndex + 1) % this.apiKeys.length;
+        return key;
+    }
+
+    /**
+     * Gera texto usando o modelo especificado da OpenRouter.
+     * @param prompt O prompt para a geração de texto.
+     * @returns O texto gerado pelo modelo.
+     */
+    public async generateText(prompt: string): Promise<string> {
+        const apiKey = this.getNextKey();
+        const model = "x-ai/grok-4-fast:free";
+
+        try {
+            const response = await axios.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                {
+                    model: model,
+                    messages: [{ role: "user", content: prompt }],
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': 'http://localhost:3000', // Referer pode ser necessário para alguns modelos gratuitos
+                        'X-Title': 'Gerador de Marketing IA'
+                    }
+                }
+            );
+
+            if (response.data && response.data.choices && response.data.choices.length > 0) {
+                return response.data.choices[0].message.content;
+            } else {
+                throw new Error('A resposta da API da OpenRouter não continha o texto esperado.');
+            }
+        } catch (error: any) {
+            console.error(`Erro ao chamar a API da OpenRouter com a chave ${this.currentKeyIndex}:`, error.response?.data || error.message);
+
+            // Tenta com a próxima chave em caso de erro (lógica simples de failover)
+            if (this.apiKeys.length > 1) {
+                console.log("Tentando com a próxima chave de API...");
+                return this.generateText(prompt); // Cuidado com loops infinitos se todas as chaves falharem
+            }
+
+            throw new Error(`Falha ao gerar texto com a OpenRouter: ${error.response?.data?.error?.message || error.message}`);
+        }
+    }
 }
 
-export const openRouterService = new OpenRouterService(OPENROUTER_API_KEY, APP_BASE_URL);
+export const openRouterService = new OpenRouterService();

@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { useAuthStore } from '@/lib/auth';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
@@ -19,14 +17,13 @@ import {
   Bell,
   MessageCircle,
   Download,
-  LogOut,
   Globe,
   ChevronLeft,
   ChevronRight,
-  Settings,
   CalendarCheck
 } from 'lucide-react';
 
+// O item de menu 'Integrações' foi removido.
 const menuItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/campaigns', label: 'Campanhas', icon: Rocket },
@@ -39,7 +36,6 @@ const menuItems = [
   { path: '/metrics', label: 'Métricas', icon: TrendingUp },
   { path: '/alerts', label: 'Alertas', icon: Bell, notificationKey: 'alerts' },
   { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
-  { path: '/integrations', label: 'Integrações', icon: Settings },
   { path: '/export', label: 'Exportar', icon: Download },
 ];
 
@@ -51,13 +47,13 @@ interface DashboardData {
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { user, logout, isAuthenticated } = useAuthStore();
+  // O hook useAuthStore foi removido.
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const { data: dashboardData } = useQuery<DashboardData>({
     queryKey: ['dashboardDataSidebar'], 
     queryFn: async () => {
-      if (!user) return { metrics: {}, recentCampaigns: [], alertCount: 0 };
+      // A chamada de API agora não depende mais do usuário.
       const response = await apiRequest('GET', '/api/dashboard?timeRange=30d'); 
       if (!response.ok) {
         console.error('Erro ao buscar dados do dashboard para a sidebar');
@@ -65,23 +61,13 @@ export default function Sidebar() {
       }
       return response.json();
     },
-    enabled: !!user && isAuthenticated,
+    // A verificação de 'enabled' foi removida, a query agora sempre executa.
     staleTime: 5 * 60 * 1000, 
   });
 
   const alertCount = dashboardData?.alertCount || 0;
 
   const toggleSidebar = () => setIsCollapsed(!isCollapsed);
-
-  const getUserInitials = (username: string | undefined) => {
-    if (!username) return 'U';
-    return username
-      .split(' ')
-      .map(name => name[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
 
   return (
     <aside 
@@ -118,7 +104,8 @@ export default function Sidebar() {
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = location === item.path || (location === '/' && item.path === '/dashboard');
-          const hasNotification = item.notificationKey === 'alerts' && user && alertCount > 0;
+          // A verificação de 'user' foi removida da lógica de notificação.
+          const hasNotification = item.notificationKey === 'alerts' && alertCount > 0;
           
           return (
             <Link key={item.path} href={item.path} title={isCollapsed ? item.label : undefined}>
@@ -170,38 +157,7 @@ export default function Sidebar() {
         </Button>
       </div>
 
-      {!isCollapsed && user && (
-        <div className="p-2.5 border-t border-sidebar-border shrink-0">
-          <div className="neu-card p-2.5">
-            <div className="flex items-center space-x-2">
-              <Avatar className="w-9 h-9 neu-card-inset p-0.5">
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                  {getUserInitials(user?.username)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-foreground truncate">
-                  {user?.username}
-                </p>
-                <p className="text-[0.7rem] text-muted-foreground truncate">
-                  {user?.email}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  logout();
-                }}
-                className="theme-toggle-button p-1.5 text-muted-foreground hover:text-destructive"
-                title="Sair"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* A seção de perfil de usuário e o botão de logout foram removidos. */}
     </aside>
   );
 }

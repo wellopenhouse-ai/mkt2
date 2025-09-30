@@ -2,10 +2,10 @@
 import { Flow, FlowElementData } from '../shared/schema';
 import { WhatsappConnectionService } from './services/whatsapp-connection.service';
 import { storage } from './storage';
-import pino from 'pino';
+import baseLogger from './services/logger.service';
 import { WAMessage } from '@whiskeysockets/baileys';
 
-const logger = pino({ level: 'debug' }).child({ module: 'FlowExecutor' });
+const logger = baseLogger.child({ module: 'FlowExecutor' });
 
 interface ContactFlowState {
   flowId: number;

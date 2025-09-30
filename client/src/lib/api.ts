@@ -1,5 +1,4 @@
 // client/src/lib/api.ts
-import { useAuthStore } from './auth';
 
 // Helper para construir a URL completa da API
 function getApiUrl(path: string): string {
@@ -16,11 +15,10 @@ function getApiUrl(path: string): string {
 
 export async function apiRequest(
   method: string,
-  url: string, // url agora é o PATH da API, ex: /auth/login
+  url: string, // url agora é o PATH da API
   data?: unknown,
   isFormData: boolean = false
 ): Promise<Response> {
-  const { token } = useAuthStore.getState();
   const fullApiUrl = getApiUrl(url); // Constrói a URL completa
 
   const headers: Record<string, string> = {};
@@ -29,9 +27,7 @@ export async function apiRequest(
     headers['Content-Type'] = 'application/json';
   }
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  // A lógica do token de autenticação foi removida.
 
   let body;
   if (isFormData && data instanceof FormData) {
@@ -78,12 +74,11 @@ export async function apiRequest(
 }
 
 export async function uploadFile(
-  url: string, // url agora é o PATH da API, ex: /creatives
+  url: string, // url agora é o PATH da API
   file: File,
   additionalData?: Record<string, string>,
   method: string = 'POST'
 ): Promise<Response> {
-  const { token } = useAuthStore.getState();
   const fullApiUrl = getApiUrl(url); // Constrói a URL completa
 
   const formData = new FormData();
@@ -97,9 +92,7 @@ export async function uploadFile(
 
   const headers: Record<string, string> = {};
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  // A lógica do token de autenticação foi removida.
 
   const response = await fetch(fullApiUrl, { // Usa fullApiUrl
     method: method,

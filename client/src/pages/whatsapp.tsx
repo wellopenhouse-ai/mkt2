@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
-import { useAuthStore } from '@/lib/auth';
+// import { useAuthStore } from '@/lib/auth'; // Removido
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -323,7 +323,7 @@ const WhatsApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState('connection'); 
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const auth = useAuthStore();
+  // const auth = useAuthStore(); // Removido
   
   const [activeFlowIdForEditor, setActiveFlowIdForEditor] = useState<number | null>(null);
   
@@ -335,7 +335,7 @@ const WhatsApp: React.FC = () => {
   const { data: contacts = [], isLoading: isLoadingContacts, error: contactsError, refetch: refetchContacts } = useQuery<Contact[]>({
     queryKey: ['whatsappContacts'],
     queryFn: async () => apiRequest('GET', '/api/whatsapp/contacts').then(res => res.json()),
-    enabled: auth.isAuthenticated,
+    // enabled: auth.isAuthenticated, // Removido
     refetchInterval: 30000,
   });
 
@@ -381,7 +381,7 @@ const WhatsApp: React.FC = () => {
   const { data: flowsList = [], isLoading: isLoadingFlowsList, error: flowsListError } = useQuery<FlowData[]>({
     queryKey: ['flows', filterCampaignIdForList],
     queryFn: async () => {
-      if (!auth.isAuthenticated) return [];
+      // if (!auth.isAuthenticated) return []; // Removido
       let url = '/api/flows';
       const params = new URLSearchParams();
       if (filterCampaignIdForList !== 'all') {
@@ -392,19 +392,19 @@ const WhatsApp: React.FC = () => {
       if (!response.ok) throw new Error('Falha ao buscar fluxos');
       return response.json();
     },
-    enabled: auth.isAuthenticated,
+    // enabled: auth.isAuthenticated, // Removido
   });
   
   const { data: campaignListForFilter = [] } = useQuery<CampaignSelectItem[]>({
       queryKey: ['campaignsForFlowFilter'],
       queryFn: async () => {
-        if (!auth.isAuthenticated) return [];
+        // if (!auth.isAuthenticated) return []; // Removido
         const response = await apiRequest('GET', '/api/campaigns');
         if (!response.ok) throw new Error('Falha ao buscar campanhas para filtro');
         const data: any[] = await response.json();
         return data.map(c => ({ id: String(c.id), name: c.name }));
       },
-      enabled: auth.isAuthenticated,
+      // enabled: auth.isAuthenticated, // Removido
   });
 
   const createNewFlowMutation = useMutation<FlowData, Error, { name: string; campaign_id: number | null }>({
@@ -419,12 +419,12 @@ const WhatsApp: React.FC = () => {
   });
 
   const createNewFlowForList = useCallback(async () => {
-    if (!auth.isAuthenticated) return;
+    // if (!auth.isAuthenticated) return; // Removido
     const newFlowName = prompt("Nome do Novo Fluxo:", "Novo Fluxo de Atendimento");
     if (!newFlowName || !newFlowName.trim()) return;
     const campaignIdToAssign = filterCampaignIdForList === 'all' || filterCampaignIdForList === 'none' ? null : Number(filterCampaignIdForList);
     createNewFlowMutation.mutate({ name: newFlowName.trim(), campaign_id: campaignIdToAssign });
-  }, [auth.isAuthenticated, filterCampaignIdForList, createNewFlowMutation]);
+  }, [filterCampaignIdForList, createNewFlowMutation]);
 
   const deleteFlowMutation = useMutation<void, Error, number>({
     mutationFn: async (flowId: number) => { const response = await apiRequest('DELETE', `/api/flows?id=${flowId}`); if (!response.ok) { const err = await response.json(); throw new Error(err.message || 'Falha ao deletar fluxo'); } },

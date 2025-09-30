@@ -72,10 +72,6 @@ import {
   type SavedCopy,
 } from '@/config/copyConfigurations';
 
-// Schemas da IA (definidos localmente ou importados de copyConfigurations.ts)
-const aiResponseSchema = { type: "OBJECT", properties: { mainCopy: { type: "STRING" }, alternativeVariation1: { type: "STRING" }, alternativeVariation2: { type: "STRING" }, platformSuggestion: { type: "STRING" }, notes: { type: "STRING" } }, required: ["mainCopy", "platformSuggestion"] };
-const contentIdeasResponseSchema = { type: "OBJECT", properties: { contentIdeas: { type: "ARRAY", items: { "type": "STRING" } } }, required: ["contentIdeas"] };
-const optimizeCopyResponseSchema = { type: "OBJECT", properties: { optimizedCopy: { type: "STRING" }, optimizationNotes: { type: "STRING" } }, required: ["optimizedCopy"] };
 
 // Schema para o formulário base (definido localmente ou importado de copyConfigurations.ts)
 const baseGeneratorFormSchema = z.object({
@@ -155,10 +151,11 @@ export default function CopyPage() {
   });
 
   const generateSpecificCopyMutation = useMutation<BackendGeneratedCopyItem[], Error, FullGeneratorPayload>({
-    mutationFn: async (payload) => { 
+    mutationFn: async (payload) => {
         const currentPurposeConfig = allCopyPurposesConfig.find(p => p.key === payload.copyPurposeKey);
         if (!currentPurposeConfig) throw new Error("Configuração da finalidade da copy não encontrada.");
         const launchPhaseLabel = payload.launchPhase === 'pre_launch' ? 'Pré-Lançamento' : payload.launchPhase === 'launch' ? 'Lançamento' : 'Pós-Lançamento';
+
         let prompt = `Contexto da IA: Você é um Copywriter Mestre, especialista em criar textos persuasivos e altamente eficazes para lançamentos digitais no mercado brasileiro. Sua linguagem deve ser adaptada ao tom solicitado.
 ---
 INFORMAÇÕES BASE PARA ESTA COPY:
@@ -180,27 +177,27 @@ ${Object.entries(payload.details).map(([key, value]) => {
 ---
 TAREFA:
 Com base em TODAS as informações acima, gere os seguintes textos para a finalidade "${currentPurposeConfig.label}".
-Responda OBRIGATORIAMENTE em formato JSON VÁLIDO, seguindo o schema abaixo.
+Responda OBRIGATORIAMENTE em formato JSON VÁLIDO, com os campos: "mainCopy" (string), "alternativeVariation1" (string, opcional), "alternativeVariation2" (string, opcional), "platformSuggestion" (string, opcional), "notes" (string, opcional).
 Observações importantes para sua geração:
 - Incorpore os "Detalhes Específicos" de forma inteligente e natural na "mainCopy".
 - Se um detalhe crucial não foi informado, use seu conhecimento para criar a melhor copy possível.
 - Seja direto, claro e use gatilhos mentais apropriados.
 - Para anúncios, pense em limite de caracteres.
 - Para e-mails, estruture com parágrafos curtos e CTA claro.`;
-        if (currentPurposeConfig.promptEnhancer) prompt = currentPurposeConfig.promptEnhancer(prompt, payload.details, payload);
-        let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
-        const apiPayloadToGemini = { contents: chatHistory, generationConfig: { responseMimeType: "application/json", responseSchema: aiResponseSchema }};
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        if (!apiKey) throw new Error("Chave da API Gemini não configurada no frontend.");
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(apiPayloadToGemini) });
-        if (!response.ok) { const errorData = await response.json().catch(() => ({error: {message: `Erro ${response.status} na API Gemini.`}})); throw new Error(`Erro da IA: ${errorData?.error?.message || response.statusText}`); }
-        const result = await response.json();
-        if (result.candidates?.[0]?.content?.parts?.[0]) {
-            const generatedData = JSON.parse(result.candidates[0].content.parts[0].text) as BackendGeneratedCopyItem;
-            return [generatedData]; 
+
+        if (currentPurposeConfig.promptEnhancer) {
+            prompt = currentPurposeConfig.promptEnhancer(prompt, payload.details, payload);
         }
-        throw new Error("Resposta inesperada da API Gemini.");
+
+        const response = await apiRequest('POST', '/api/generate-copy', { prompt });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || 'Falha ao comunicar com o servidor de IA.');
+        }
+
+        const result = await response.json();
+        const generatedData = JSON.parse(result.text) as BackendGeneratedCopyItem;
+        return [generatedData];
     },
     onSuccess: (data) => { 
       if (!Array.isArray(data) || data.length === 0) { toast({ title: 'Nenhuma copy gerada', description: 'A IA não retornou sugestões.', variant: 'default' }); setGeneratedCopies([]); return; }
@@ -213,17 +210,16 @@ Observações importantes para sua geração:
 
   const generateContentIdeasMutation = useMutation<string[], Error, { product: string; audience: string; objective: string }>({
     mutationFn: async (payload) => {
-      const prompt = `Dado o produto "${payload.product}" e o público-alvo "${payload.audience}", gere uma lista de 5 ideias concisas para posts de blog ou redes sociais que seriam relevantes e engajadoras para este público, focando no objetivo de "${payload.objective}". Retorne as ideias como um array de strings em JSON.`;
-      let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
-      const apiPayloadToGemini = { contents: chatHistory, generationConfig: { responseMimeType: "application/json", responseSchema: contentIdeasResponseSchema }};
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Chave da API Gemini não configurada.");
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-      const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(apiPayloadToGemini) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({error: {message: 'Erro API Gemini'}})); throw new Error(`Erro da IA: ${errorData?.error?.message || response.statusText}`); }
+      const prompt = `Dado o produto "${payload.product}" e o público-alvo "${payload.audience}", gere uma lista de 5 ideias concisas para posts de blog ou redes sociais que seriam relevantes e engajadoras para este público, focando no objetivo de "${payload.objective}". Retorne as ideias como um array de strings em um objeto JSON com a chave "contentIdeas". Exemplo: {"contentIdeas": ["Ideia 1", "Ideia 2"]}`;
+
+      const response = await apiRequest('POST', '/api/generate-copy', { prompt });
+      if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || 'Falha ao gerar ideias.');
+      }
       const result = await response.json();
-      if (result.candidates?.[0]?.content?.parts?.[0]) { const parsedResult = JSON.parse(result.candidates[0].content.parts[0].text); return parsedResult.contentIdeas || []; }
-      throw new Error("Resposta inesperada da IA para ideias de conteúdo.");
+      const parsedResult = JSON.parse(result.text);
+      return parsedResult.contentIdeas || [];
     },
     onSuccess: (data) => { setContentIdeas(data); setIsContentIdeasModalOpen(true); toast({ title: 'Ideias de Conteúdo Geradas!' }); },
     onError: (error: Error) => { toast({ title: 'Erro ao Gerar Ideias', description: error.message, variant: 'destructive' }); },
@@ -233,16 +229,14 @@ Observações importantes para sua geração:
     mutationFn: async (payload) => {
       const purposeConfig = allCopyPurposesConfig.find(p => p.key === payload.purposeKey);
       const prompt = `Analise e otimize a seguinte copy, originalmente criada para a finalidade de "${purposeConfig?.label || 'desconhecida'}" com o objetivo de "${payload.baseForm.objective}" e tom "${payload.baseForm.tone}". A copy é: '${payload.originalCopy}'. Retorne uma versão otimizada e, opcionalmente, uma breve nota sobre as mudanças feitas. Responda em JSON com os campos "optimizedCopy" (string) e "optimizationNotes" (string, opcional).`;
-      let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
-      const apiPayloadToGemini = { contents: chatHistory, generationConfig: { responseMimeType: "application/json", responseSchema: optimizeCopyResponseSchema }};
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Chave da API Gemini não configurada.");
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-      const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(apiPayloadToGemini) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({error: {message: 'Erro API Gemini'}})); throw new Error(`Erro da IA: ${errorData?.error?.message || response.statusText}`); }
+
+      const response = await apiRequest('POST', '/api/generate-copy', { prompt });
+      if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || 'Falha ao otimizar a copy.');
+      }
       const result = await response.json();
-      if (result.candidates?.[0]?.content?.parts?.[0]) { return JSON.parse(result.candidates[0].content.parts[0].text); }
-      throw new Error("Resposta inesperada da IA para otimização.");
+      return JSON.parse(result.text);
     },
     onSuccess: (data, variables) => {
       setGeneratedCopies(prevCopies => prevCopies.map((copy, index) => index === variables.copyIndex ? { ...copy, mainCopy: data.optimizedCopy, notes: `${copy.notes || ''}\nNota Otim.: ${data.optimizationNotes || 'Otimizada.'}`.trim() } : copy ));
@@ -537,7 +531,7 @@ Observações importantes para sua geração:
           <div className="p-4 max-h-[400px] overflow-y-auto custom-scrollbar">
             {generateContentIdeasMutation.isPending && <div className="text-center py-4"><Loader2 className="w-6 h-6 text-primary mx-auto animate-spin" /> Gerando ideias...</div>}
             {generateContentIdeasMutation.isError && <div className="text-destructive">Ocorreu um erro ao gerar as ideias. Tente novamente.</div>}
-            {contentIdeas.length > 0 && !generateContentIdeasMutation.isPending && (
+            {contentIdeas.length > 0 && !generateContentIdeasMutation.isPending && !generateContentIdeasMutation.isError && (
               <ul className="list-disc pl-5 space-y-2 mt-2 text-sm text-muted-foreground">
                 {contentIdeas.map((idea, index) => ( <li key={index}>{idea}</li> ))}
               </ul>
