@@ -1,12 +1,4 @@
 import express, { Router, Request, Response, NextFunction, ErrorRequestHandler } from 'express';
-import { db } from './db';
-import { 
-  campaigns as campaignsSchema, 
-  tasks as tasksSchema,
-  landingPages as landingPagesSchema,
-  integrations as integrationsSchema
-} from '../shared/schema';
-import { eq, desc, and } from 'drizzle-orm';
 import { setupMulter } from './multer.config';
 import { openRouterService } from './services/openrouter.service';
 import path from 'path';
@@ -21,7 +13,6 @@ import { handleMCPConversation } from "./mcp_handler";
 import axios from "axios";
 import { createServer, type Server as HttpServer } from "http";
 
-// A interface AuthenticatedRequest e a lógica de usuário foram removidas.
 async function doRegisterRoutes(app: express.Express): Promise<HttpServer> {
     const { creativesUpload, lpAssetUpload, mcpAttachmentUpload } = setupMulter(UPLOADS_PATH);
     const UPLOADS_DIR_NAME = path.basename(UPLOADS_PATH);
@@ -42,14 +33,13 @@ async function doRegisterRoutes(app: express.Express): Promise<HttpServer> {
       res.status(err.statusCode || 500).json({ error: err.message || "Erro interno do servidor." });
     };
 
-    // O sistema de múltiplos usuários para WhatsApp foi simplificado para um único usuário (ID 1).
     const whatsappService = new WhatsappConnectionService(1);
 
     // --- ROTAS PÚBLICAS ---
     publicRouter.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
     publicRouter.get('/landingpages/slug/:slug', async (req, res, next) => { try { const lp = await storage.getLandingPageBySlug(req.params.slug); if (!lp) return res.status(404).json({ error: 'Página não encontrada' }); res.json(lp); } catch(e) { next(e); } });
 
-    // --- ROTAS DE API (anteriormente protegidas, agora abertas) ---
+    // --- ROTAS DE API ---
 
     // Rota de Dashboard
     apiRouter.get('/dashboard', async (req: Request, res, next) => { try { const timeRange = req.query.timeRange as string | undefined; res.json(await storage.getDashboardData(timeRange)); } catch (e) { next(e); }});
@@ -80,7 +70,6 @@ async function doRegisterRoutes(app: express.Express): Promise<HttpServer> {
     apiRouter.post('/copies', async (req: Request, res, next) => { try { const data = schemaShared.insertCopySchema.parse(req.body); res.status(201).json(await storage.createCopy(data)); } catch (e) { next(e); } });
     apiRouter.delete('/copies/:id', async (req: Request, res, next) => { try { await storage.deleteCopy(parseInt(req.params.id)); res.status(204).send(); } catch (e) { next(e); }});
 
-    // Rota para Geração de Copy (Proxy para o serviço de IA)
     apiRouter.post('/generate-copy', async (req: Request, res, next) => {
       try {
         const { prompt } = req.body;
@@ -88,7 +77,6 @@ async function doRegisterRoutes(app: express.Express): Promise<HttpServer> {
           return res.status(400).json({ error: 'O "prompt" é obrigatório e deve ser uma string.' });
         }
         const generatedText = await openRouterService.generateText(prompt);
-        // A API da OpenRouter pode retornar o texto dentro de um objeto, vamos garantir o retorno correto.
         res.json({ text: generatedText });
       } catch (e) {
         next(e);
@@ -101,11 +89,8 @@ async function doRegisterRoutes(app: express.Express): Promise<HttpServer> {
     apiRouter.post('/landingpages/preview-advanced', async (req: Request, res, next) => { try { const { prompt, reference, options } = req.body; if (!prompt) return res.status(400).json({ error: 'O prompt é obrigatório.' }); const fullPrompt = `Gere o código HTML completo para uma landing page com base nas seguintes instruções. O código deve usar TailwindCSS e ser um arquivo HTML completo, incluindo <!DOCTYPE html>, <html>, <head> com o título da página e <script src="https://cdn.tailwindcss.com"></script>, e o <body>.
 
 Instrução principal do usuário: "${prompt}"
-
 Opções de Estilo: ${JSON.stringify(options || {})}
-
 ${reference ? `Use o seguinte código HTML como referência para o estilo e estrutura, mas não o copie exatamente:\n\n---\n${reference}\n---` : ''}
-
 Responda apenas com o código HTML.`; const generatedHtml = await openRouterService.generateText(fullPrompt); res.status(200).json({ htmlContent: generatedHtml }); } catch (e) { next(e); }});
     apiRouter.get('/landingpages/:id', async (req: Request, res, next) => { try { const lp = await storage.getLandingPage(parseInt(req.params.id)); if (!lp) return res.status(404).json({ error: 'Página não encontrada.' }); res.json(lp); } catch (e) { next(e); } });
     apiRouter.put('/landingpages/:id', async (req: Request, res, next) => { try { const lpData = schemaShared.insertLandingPageSchema.partial().parse(req.body); const updated = await storage.updateLandingPage(parseInt(req.params.id), lpData); if (!updated) return res.status(404).json({ error: "Página não encontrada." }); res.json(updated); } catch(e){ next(e); }});
@@ -113,11 +98,8 @@ Responda apenas com o código HTML.`; const generatedHtml = await openRouterServ
     apiRouter.post('/landingpages/generate-variations', async (req: Request, res, next) => { try { const { prompt, count, options, reference } = req.body; if (!prompt) return res.status(400).json({ error: 'O prompt é obrigatório para gerar variações.' }); const variationCount = count || 2; const variationPromises = []; const basePrompt = `Gere uma variação de código HTML para uma landing page com base nas seguintes instruções. O código deve usar TailwindCSS e ser um arquivo HTML completo, incluindo <!DOCTYPE html>, <html>, <head> com o título da página e <script src="https://cdn.tailwindcss.com"></script>, e o <body>.
 
 Instrução principal do usuário: "${prompt}"
-
 Opções de Estilo: ${JSON.stringify(options || {})}
-
 ${reference ? `Use o seguinte código HTML como referência para o estilo e estrutura, mas não o copie exatamente:\n\n---\n${reference}\n---` : ''}
-
 Responda apenas com o código HTML.`; for (let i = 0; i < variationCount; i++) { variationPromises.push(openRouterService.generateText(`${basePrompt}\n\nInstrução Adicional: Crie a Variação #${i + 1} com uma abordagem criativa diferente.`)); } const variations = await Promise.all(variationPromises); res.json({ variations }); } catch (e) { next(e); } });
     apiRouter.post('/landingpages/optimize', async (req: Request, res, next) => { try { const { html, goals } = req.body; if (!html) return res.status(400).json({ error: 'O conteúdo HTML é obrigatório para otimização.' }); const prompt = `Otimize o seguinte código HTML de uma landing page para atingir estas metas: ${goals || 'melhorar a conversão'}. Analise o HTML, identifique áreas de melhoria e reescreva o código para ser mais eficaz, mantendo a estrutura e o conteúdo principal.
 
@@ -125,23 +107,20 @@ HTML Original:
 ---
 ${html}
 ---
-
 Responda apenas com o código HTML otimizado.`; const optimizedHtml = await openRouterService.generateText(prompt); res.json({ htmlContent: optimizedHtml }); } catch (e) { next(e); } });
     apiRouter.post('/analyze-scenario', async (req: Request, res: Response) => { try { const { inputs, calculations } = req.body; if (!inputs || !calculations) { return res.status(400).json({ message: 'Dados de inputs e calculations são obrigatórios.' }); } const prompt = `Analise o seguinte cenário de funil de marketing e forneça uma análise detalhada sobre sua viabilidade, pontos fortes, pontos fracos e sugestões de melhoria.
 
 Dados de Entrada do Cenário:
 ${JSON.stringify(inputs, null, 2)}
-
 Cálculos e Métricas do Funil:
 ${JSON.stringify(calculations, null, 2)}
-
 Seja claro e estruturado em sua análise.`; const analysis = await openRouterService.generateText(prompt); res.json({ analysis }); } catch (error) { console.error('Erro na rota /analyze-scenario:', error); const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'; res.status(500).json({ message: 'Falha ao analisar o cenário', error: errorMessage }); } });
     
     // Rotas de Assets para Landing Pages (GrapesJS)
     apiRouter.post('/assets/lp-upload', lpAssetUpload.array('files'), (req: Request, res, next) => { try { if (!req.files || !Array.isArray(req.files) || req.files.length === 0) return res.status(400).json({ error: "Nenhum arquivo enviado." }); const urls = req.files.map(file => `${APP_BASE_URL}/${UPLOADS_DIR_NAME}/lp-assets/${file.filename}`); res.status(200).json(urls); } catch(e){ next(e); }});
 
     // Rotas do MCP (ubie)
-    apiRouter.post('/mcp/converse', async (req: Request, res, next) => { try { const { message, sessionId, attachmentUrl } = req.body; const payload = await handleMCPConversation(1, message, sessionId, attachmentUrl); res.json(payload); } catch(e) { next(e); }}); // Hardcoded userId=1
+    apiRouter.post('/mcp/converse', async (req: Request, res, next) => { try { const { message, sessionId, attachmentUrl } = req.body; const payload = await handleMCPConversation(1, message, sessionId, attachmentUrl); res.json(payload); } catch(e) { next(e); }});
     apiRouter.post('/mcp/upload-attachment', mcpAttachmentUpload.single('attachment'), (req: Request, res, next) => { try { if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado." }); const publicUrl = `${APP_BASE_URL}/${UPLOADS_DIR_NAME}/mcp-attachments/${req.file.filename}`; res.status(200).json({ url: publicUrl }); } catch (e) { next(e); } });
     
     // Rotas de Sessões de Chat
@@ -152,7 +131,7 @@ Seja claro e estruturado em sua análise.`; const analysis = await openRouterSer
     apiRouter.delete('/chat/sessions/:sessionId', async (req: Request, res, next) => { try { await storage.deleteChatSession(parseInt(req.params.sessionId)); res.status(204).send(); } catch(e){ next(e); }});
 
     // Rotas do WhatsApp
-    apiRouter.get('/whatsapp/status', (req: Request, res) => res.json(WhatsappConnectionService.getStatus(1))); // Hardcoded userId=1
+    apiRouter.get('/whatsapp/status', (req: Request, res) => res.json(WhatsappConnectionService.getStatus(1)));
     apiRouter.post('/whatsapp/connect', async (req: Request, res, next) => { try { whatsappService.connectToWhatsApp(); res.status(202).json({ message: "Iniciando conexão..." }); } catch (e) { next(e); } });
     apiRouter.post('/whatsapp/disconnect', async (req: Request, res, next) => { try { await whatsappService.disconnectWhatsApp(); res.json({ message: "Desconexão solicitada." }); } catch (e) { next(e); }});
 

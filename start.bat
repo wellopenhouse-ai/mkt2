@@ -1,6 +1,24 @@
 @echo off
 chcp 65001 > nul
 
+REM --- Verificacao de Dependencias ---
+IF NOT EXIST node_modules (
+    echo.
+    echo ===================== ATENCAO =====================
+    echo.
+    echo A pasta 'node_modules' nao foi encontrada.
+    echo Isso significa que as dependencias do projeto
+    echo ainda nao foram instaladas.
+    echo.
+    echo Por favor, execute o arquivo 'install.bat' primeiro.
+    echo.
+    echo ===================================================
+    echo.
+    echo Pressione qualquer tecla para fechar...
+    pause > nul
+    goto :eof
+)
+
 echo =================================================
 echo      INICIALIZADOR DA APLICACAO
 echo =================================================

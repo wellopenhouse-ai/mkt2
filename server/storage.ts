@@ -47,6 +47,8 @@ export class StorageAdapter {
       return { ...phase, tasks };
     });
 
+    phasesWithTasks.sort((a, b) => a.order - b.order);
+
     return { ...campaign, phases: phasesWithTasks };
   }
 
@@ -143,6 +145,10 @@ export class StorageAdapter {
         excelStorage.delete('campaignPhases', phase.id);
     }
     return excelStorage.delete('campaigns', id);
+  }
+
+  async createPhase(campaignId: number, phaseData: { name: string; order?: number }): Promise<schema.CampaignPhase> {
+    return excelStorage.create<schema.CampaignPhase>('campaignPhases', { campaignId, ...phaseData });
   }
 
   // --- Tarefas ---

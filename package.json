@@ -4,15 +4,14 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "NODE_ENV=development tsx server/index.ts",
+    "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "build": "rm -rf dist && npx vite build && npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "start": "NODE_ENV=production node dist/index.js",
+    "start": "cross-env NODE_ENV=production node dist/index.js",
     "check": "tsc"
   },
   "dependencies": {
     "@grapesjs/studio-sdk": "^1.0.49",
     "@grapesjs/studio-sdk-plugins": "^1.0.24",
-    "hono": "^4.4.12",
     "@hono/node-server": "^1.11.2",
     "@hono/zod-validator": "^0.2.2",
     "@hookform/resolvers": "^3.10.0",
@@ -69,6 +68,7 @@
     "grapesjs": "^0.21.13",
     "grapesjs-preset-webpage": "^1.0.3",
     "grapesjs-tailwind": "^1.0.11",
+    "hono": "^4.4.12",
     "html2canvas": "^1.4.1",
     "input-otp": "^1.4.2",
     "jspdf": "^2.5.1",
@@ -136,6 +136,7 @@
     "@types/react-dom": "^18.3.1",
     "@types/remarkable": "^2.0.8",
     "@types/ws": "^8.5.13",
+    "cross-env": "^7.0.3",
     "esbuild": "^0.25.0",
     "pino-pretty": "^11.2.1",
     "tsx": "^4.19.1",
